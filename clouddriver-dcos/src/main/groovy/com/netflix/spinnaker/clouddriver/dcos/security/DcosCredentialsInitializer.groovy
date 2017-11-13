@@ -17,6 +17,7 @@
 
 package com.netflix.spinnaker.clouddriver.dcos.security
 
+import com.netflix.spectator.api.Registry
 import com.netflix.spinnaker.cats.module.CatsModule
 import com.netflix.spinnaker.cats.provider.ProviderSynchronizerTypeWrapper
 import com.netflix.spinnaker.clouddriver.dcos.DcosClientCompositeKey
@@ -25,10 +26,12 @@ import com.netflix.spinnaker.clouddriver.dcos.DcosConfigurationProperties
 import com.netflix.spinnaker.clouddriver.security.AccountCredentialsRepository
 import com.netflix.spinnaker.clouddriver.security.CredentialsInitializerSynchronizable
 import com.netflix.spinnaker.clouddriver.security.ProviderUtils
+import feign.FeignException
 import groovy.util.logging.Slf4j
 import mesosphere.dcos.client.DCOS
 import mesosphere.dcos.client.DCOSException
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
 import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Bean
@@ -40,6 +43,8 @@ import org.springframework.context.annotation.Scope
 @Configuration
 class DcosCredentialsInitializer implements CredentialsInitializerSynchronizable {
   private final static LOGGER = LoggerFactory.getLogger(DcosCredentialsInitializer)
+
+  @Autowired Registry spectatorRegistry
 
   @Bean
   List<? extends DcosAccountCredentials> dcosCredentials(String clouddriverUserAgentApplicationName,
@@ -103,12 +108,13 @@ class DcosCredentialsInitializer implements CredentialsInitializerSynchronizable
 
           DcosClusterCredentials clusterCredentials = DcosClusterCredentials.builder().key(key.get()).dcosUrl(cluster.dcosUrl)
             .secretStore(cluster.secretStore).dockerRegistries(dockerRegistries)
-            .dcosConfig(DcosConfigurationProperties.buildConfig(account, cluster, clusterConfig)).build()
+            .dcosConfig(DcosConfigurationProperties.buildConfig(account, cluster, clusterConfig))
+            .spectatorRegistry(spectatorRegistry).build()
 
           DCOS client = clientProvider.getDcosClient(clusterCredentials)
           try {
             client.getServerInfo()
-          } catch (DCOSException e) {
+          } catch (DCOSException | FeignException e) {
             LOGGER.error("[account={}] There was a problem trying to connect to the cluster with url=[{}] using uid=[{}]. Details: ", account.name, cluster.dcosUrl, clusterConfig.uid, e)
           }
 
@@ -118,7 +124,7 @@ class DcosCredentialsInitializer implements CredentialsInitializerSynchronizable
         DcosAccountCredentials dcosCredentials = DcosAccountCredentials.builder().account(account.name).environment(account.environment)
                 .accountType(account.accountType).dockerRegistries(account.dockerRegistries)
                 .requiredGroupMembership(account.requiredGroupMembership).clusters(allAccountClusterCredentials)
-                .permissions(account.permissions.build()).build()
+                .permissions(account.permissions.build()).spectatorRegistry(spectatorRegistry).build()
 
         // Note: The MapBackedAccountCredentialsRepository doesn't actually use the key for anything currently.
         accountCredentialsRepository.save(dcosCredentials.name, dcosCredentials)
