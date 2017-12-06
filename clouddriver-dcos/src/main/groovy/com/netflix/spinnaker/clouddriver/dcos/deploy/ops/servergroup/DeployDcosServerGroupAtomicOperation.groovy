@@ -26,6 +26,7 @@ import com.netflix.spinnaker.clouddriver.dcos.deploy.util.id.DcosSpinnakerAppId
 import com.netflix.spinnaker.clouddriver.dcos.deploy.util.mapper.DeployDcosServerGroupDescriptionToAppMapper
 import com.netflix.spinnaker.clouddriver.deploy.DeploymentResult
 import com.netflix.spinnaker.clouddriver.orchestration.AtomicOperation
+import mesosphere.dcos.client.DCOSException
 
 class DeployDcosServerGroupAtomicOperation implements AtomicOperation<DeploymentResult> {
   private static final String BASE_PHASE = "DEPLOY"
@@ -69,7 +70,18 @@ class DeployDcosServerGroupAtomicOperation implements AtomicOperation<Deployment
     task.updateStatus BASE_PHASE, "Marathon ID chosen to be $dcosPathId."
     task.updateStatus BASE_PHASE, "Building application..."
 
-    dcosClient.createApp(descriptionToAppMapper.map(dcosPathId.toString(), description))
+    try {
+      dcosClient.createApp(descriptionToAppMapper.map(dcosPathId.toString(), description))
+    } catch (DCOSException e) {
+      // DC/OS may return a 503 error due to a timeout, but the deployment still occurs.
+      // This is a known issue with new deployments in crowded clusters.
+      if (e.status != 503) {
+        throw e
+      }
+
+      // TODO would could poll for a short time here to see if the deployment/application is actually created.
+      // This would fail faster (I believe) than letting the "Wait for up instances" stage time out.
+    }
 
     task.updateStatus BASE_PHASE, "Deployed service ${resolvedServerGroupName}"
 
