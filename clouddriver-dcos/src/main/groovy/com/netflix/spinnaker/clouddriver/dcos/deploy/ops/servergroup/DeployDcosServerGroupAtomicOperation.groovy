@@ -24,9 +24,11 @@ import com.netflix.spinnaker.clouddriver.dcos.deploy.DcosServerGroupNameResolver
 import com.netflix.spinnaker.clouddriver.dcos.deploy.description.servergroup.DeployDcosServerGroupDescription
 import com.netflix.spinnaker.clouddriver.dcos.deploy.util.id.DcosSpinnakerAppId
 import com.netflix.spinnaker.clouddriver.dcos.deploy.util.mapper.DeployDcosServerGroupDescriptionToAppMapper
+import com.netflix.spinnaker.clouddriver.dcos.exception.DcosOperationException
 import com.netflix.spinnaker.clouddriver.deploy.DeploymentResult
 import com.netflix.spinnaker.clouddriver.orchestration.AtomicOperation
 import mesosphere.dcos.client.DCOSException
+import mesosphere.marathon.client.model.v2.App
 
 class DeployDcosServerGroupAtomicOperation implements AtomicOperation<DeploymentResult> {
   private static final String BASE_PHASE = "DEPLOY"
@@ -73,17 +75,24 @@ class DeployDcosServerGroupAtomicOperation implements AtomicOperation<Deployment
     try {
       dcosClient.createApp(descriptionToAppMapper.map(dcosPathId.toString(), description))
     } catch (DCOSException e) {
+      task.updateStatus BASE_PHASE, "Received HTTP statusCode=${e.status} from DC/OS during app creation. Details: ${e.toString()}"
+
       // DC/OS may return a 503 error due to a timeout, but the deployment still occurs.
-      // This is a known issue with new deployments in crowded clusters.
+      // This is a known issue with new deployments in 'crowded' (for some value of crowded) clusters.
       if (e.status != 503) {
         throw e
       }
 
-      // TODO would could poll for a short time here to see if the deployment/application is actually created.
-      // This would fail faster (I believe) than letting the "Wait for up instances" stage time out.
+      // Check immediately for the application to determine if the deployment was actually started despite 503
+      Optional<App> app = dcosClient.maybeApp(dcosPathId.toString())
+      if (!app.isPresent()) {
+        throw new DcosOperationException("Unable to find application with id=${dcosPathId.toString()}.", e)
+      }
+
+      task.updateStatus BASE_PHASE, "Application found with id=${dcosPathId.toString()} - not failing deploy stage despite 503 HTTP status."
     }
 
-    task.updateStatus BASE_PHASE, "Deployed service ${resolvedServerGroupName}"
+    task.updateStatus BASE_PHASE, "Deploying service ${resolvedServerGroupName}"
 
     def deploymentResult = new DeploymentResult()
     deploymentResult.serverGroupNames = Arrays.asList("${description.region.replaceAll("/", DcosSpinnakerAppId.SAFE_REGION_SEPARATOR)}:${resolvedServerGroupName}".toString())
