@@ -35,7 +35,8 @@ class Keys implements KeyParser {
     KEY_PAIRS,
     INSTANCE_TYPES,
     ELASTIC_IPS,
-    ON_DEMAND
+    ON_DEMAND,
+    FUNCTION
 
     final String ns
     final Set<String> fields
@@ -108,6 +109,9 @@ class Keys implements KeyParser {
       case Namespace.ELASTIC_IPS.ns:
         result << [address: parts[2], account: parts[3], region: parts[4]]
         break
+      case Namespace.FUNCTION.ns:
+        result << [name: parts[2], account: parts[3], region: parts[4]]
+        break
       default:
         return null
         break
@@ -159,5 +163,11 @@ class Keys implements KeyParser {
                                 String region,
                                 String account) {
     "$ID:${Namespace.ELASTIC_IPS}:${ipAddress}:${account}:${region}"
+  }
+
+  static String getFunctionKey(String functionName,
+                               String region,
+                               String account) {
+    "$ID:${Namespace.FUNCTION}:${functionName}:${account}:${region}"
   }
 }

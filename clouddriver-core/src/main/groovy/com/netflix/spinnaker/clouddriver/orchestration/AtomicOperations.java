@@ -75,4 +75,7 @@ public final class AtomicOperations {
   // Manifest operations
   public static final String DEPLOY_MANIFEST = "deployManifest";
   public static final String DELETE_MANIFEST = "deleteManifest";
+
+  // Function operations
+  public static final String INVOKE_FUNCTION = "invokeFunction";
 }
