@@ -6,6 +6,8 @@ import com.netflix.spinnaker.cats.agent.DefaultCacheResult
 import com.netflix.spinnaker.cats.cache.CacheData
 import com.netflix.spinnaker.cats.provider.ProviderCache
 import com.netflix.spinnaker.clouddriver.dcos.DcosClientProvider
+import com.netflix.spinnaker.clouddriver.dcos.model.DcosInstance
+import com.netflix.spinnaker.clouddriver.dcos.model.DcosServerGroup
 import com.netflix.spinnaker.clouddriver.dcos.security.DcosAccountCredentials
 import com.netflix.spinnaker.clouddriver.dcos.cache.Keys
 import com.netflix.spinnaker.clouddriver.dcos.deploy.util.id.DcosSpinnakerAppId
@@ -17,6 +19,7 @@ import mesosphere.dcos.client.DCOS
 import mesosphere.marathon.client.model.v2.App
 import mesosphere.marathon.client.model.v2.GetAppNamespaceResponse
 import mesosphere.marathon.client.model.v2.GetAppResponse
+import mesosphere.marathon.client.model.v2.GetTasksResponse
 import mesosphere.marathon.client.model.v2.Task
 import spock.lang.Specification
 
@@ -252,6 +255,78 @@ class DcosServerGroupCachingAgentSpec extends Specification {
     result.cacheResults.loadBalancers.relationships.instances[0][0] == instanceKey
   }
 
+  void "Should cache instances for each of the tasks belonging to the application"() {
+    setup:
+    def validApp = Mock(App) {
+      getId() >> MARATHON_APP
+      getTasks() >> [
+        Mock(Task) {
+          getId() >> TASK
+          getAppId() >> MARATHON_APP
+        }
+      ]
+      getLabels() >> ["HAPROXY_GROUP": "${ACCOUNT}_${APP}-frontend"]
+    }
+    GetAppNamespaceResponse appsInAccount = Mock(GetAppNamespaceResponse) {
+      getApps() >> [validApp]
+    }
+
+    dcosClient.maybeApps(ACCOUNT, ['app.tasks', 'app.deployments']) >> Optional.of(appsInAccount)
+    dcosClient.getDeployments() >> []
+    def providerCacheMock = Mock(ProviderCache)
+
+    when:
+    final result = subject.loadData(providerCacheMock)
+
+    then:
+    result.cacheResults.instances.size() == 1
+
+    def cacheData1 = result.cacheResults.instances.find { it.id == instanceKey}
+    cacheData1 != null
+    cacheData1.attributes.name == TASK
+    cacheData1.attributes.instance.task.appId == MARATHON_APP
+  }
+
+  void "Should only cache marathon tasks that are owned by marathon apps under the supplied account"() {
+    setup:
+
+    def validAppId = "/${ACCOUNT}/${SERVER_GROUP}"
+    def invalidAppId = "/invalidAccount/${SERVER_GROUP}"
+
+    def validApp = Mock(App) {
+      getId() >> validAppId
+      getTasks() >> []
+      getLabels() >> ["HAPROXY_GROUP": "${ACCOUNT}_${APP}-frontend"]
+    }
+
+    def invalidApp = Mock(App) {
+      getId() >> invalidAppId
+      getTasks() >> []
+      getLabels() >> ["HAPROXY_GROUP": "${ACCOUNT}_${APP}-frontend"]
+    }
+
+    GetAppNamespaceResponse appsInAccount = Mock(GetAppNamespaceResponse) {
+      getApps() >> [validApp, invalidApp]
+    }
+
+    dcosClient.maybeApps(ACCOUNT, ['app.tasks', 'app.deployments']) >> Optional.of(appsInAccount)
+    dcosClient.getDeployments() >> []
+    def providerCacheMock = Mock(ProviderCache)
+
+    when:
+    final result = subject.loadData(providerCacheMock)
+
+    then:
+    result.cacheResults.serverGroups.size() == 1
+
+    def serverGroupKey = Keys.getServerGroupKey(DcosSpinnakerAppId.parse(validAppId).get(), REGION)
+    def cacheData1 = result.cacheResults.serverGroups.find { it.id == serverGroupKey}
+    cacheData1 != null
+    cacheData1.attributes.name == validAppId
+    cacheData1.attributes.serverGroup.app == validApp
+
+  }
+
   def appJson(String task) {
     def cacheData = MutableCacheData.mutableCacheMap()
     cacheData[serverGroupKey].with {
@@ -263,4 +338,5 @@ class DcosServerGroupCachingAgentSpec extends Specification {
                                         ], [:])
     new ObjectMapper().writeValueAsString(result.cacheResults)
   }
+
 }
