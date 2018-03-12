@@ -150,12 +150,14 @@ class DcosAccountCredentials implements AccountCredentials<DcosCredentialMap> {
         throw new IllegalArgumentException("Account name [${name}] is not valid for the DC/OS provider. Only lowercase letters, numbers, and dashes(-) are allowed.")
       }
 
+      List<DcosClusterCredentials> credentialsToRemove = new ArrayList<>()
       clusterCredentials.each {
         if (!MarathonPathId.isPartValid(it.name)) {
-          clusterCredentials.remove(it)
-          LOGGER.warn("Cluster name [${name}] is not valid for the DC/OS cluster. Only lowercase letters, numbers, and dashes(-) are allowed.")
+          credentialsToRemove.add(it)
+          LOGGER.warn("Cluster name [${it.name}] is not valid for the DC/OS cluster. Only lowercase letters, numbers, and dashes(-) are allowed.")
         }
       }
+      clusterCredentials.removeAll(credentialsToRemove)
 
       if (!dockerRegistries || dockerRegistries.size() <= 0) {
         throw new IllegalArgumentException("Docker registries for DC/OS account [${name}] missing.")
