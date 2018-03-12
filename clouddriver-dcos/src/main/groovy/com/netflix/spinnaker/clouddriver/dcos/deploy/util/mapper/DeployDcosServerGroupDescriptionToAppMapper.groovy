@@ -78,9 +78,6 @@ class DeployDcosServerGroupDescriptionToAppMapper {
         volumes = parseVolumes(description.persistentVolumes, description.dockerVolumes, description.externalVolumes)
         type = docker ? "DOCKER" : null
 
-        if (!networks && "HOST" != description.networkType) {
-          portMappings = parseNewPortMappings(resolvedAppName, description.serviceEndpoints)
-        }
 
         it
       }
