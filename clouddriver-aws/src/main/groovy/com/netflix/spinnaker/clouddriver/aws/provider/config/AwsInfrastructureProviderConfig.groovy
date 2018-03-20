@@ -24,6 +24,7 @@ import com.netflix.spinnaker.clouddriver.aws.provider.AwsInfrastructureProvider
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonElasticIpCachingAgent
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonInstanceTypeCachingAgent
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonKeyPairCachingAgent
+import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonLambdaCachingAgent
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonSecurityGroupCachingAgent
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonSubnetCachingAgent
 import com.netflix.spinnaker.clouddriver.aws.provider.agent.AmazonVpcCachingAgent
@@ -99,6 +100,7 @@ class AwsInfrastructureProviderConfig {
           newlyAddedAgents << new AmazonSecurityGroupCachingAgent(amazonClientProvider, credentials, region.name, amazonObjectMapper, registry, eddaTimeoutConfig)
           newlyAddedAgents << new AmazonSubnetCachingAgent(amazonClientProvider, credentials, region.name, amazonObjectMapper)
           newlyAddedAgents << new AmazonVpcCachingAgent(amazonClientProvider, credentials, region.name, amazonObjectMapper)
+          newlyAddedAgents << new AmazonLambdaCachingAgent(amazonClientProvider, credentials, region.name, amazonObjectMapper)
 
           // If there is an agent scheduler, then this provider has been through the AgentController in the past.
           // In that case, we need to do the scheduling here (because accounts have been added to a running system).
