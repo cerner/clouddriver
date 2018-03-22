@@ -20,6 +20,7 @@ package com.netflix.spinnaker.clouddriver.dcos.provider.agent
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.spinnaker.cats.agent.*
 import com.netflix.spinnaker.cats.provider.ProviderCache
+import com.netflix.spinnaker.clouddriver.cache.CustomScheduledAgent
 import com.netflix.spinnaker.clouddriver.dcos.DcosClientProvider
 import com.netflix.spinnaker.clouddriver.dcos.cache.Keys
 import com.netflix.spinnaker.clouddriver.dcos.provider.DcosProvider
@@ -33,9 +34,8 @@ import mesosphere.dcos.client.DCOSException
 import static com.netflix.spinnaker.cats.agent.AgentDataType.Authority.AUTHORITATIVE
 
 @Slf4j
-class DcosSecretsCachingAgent implements CachingAgent, AccountAware {
+class DcosSecretsCachingAgent implements CachingAgent {
 
-  private final String accountName
   private final String clusterName
   private final DcosClusterCredentials clusterCredentials
   private final DcosAccountCredentials credentials
@@ -46,12 +46,10 @@ class DcosSecretsCachingAgent implements CachingAgent, AccountAware {
                                                                         AUTHORITATIVE.forType(Keys.Namespace.SECRETS.ns),
                                                                       ] as Set)
 
-  DcosSecretsCachingAgent(String accountName,
-                          String clusterName,
+  DcosSecretsCachingAgent(String clusterName,
                           DcosAccountCredentials credentials,
                           DcosClientProvider clientProvider,
                           ObjectMapper objectMapper) {
-    this.accountName = accountName
     this.clusterName = clusterName
     this.clusterCredentials = credentials.getCredentialsByCluster(clusterName)
     this.credentials = credentials
@@ -62,17 +60,12 @@ class DcosSecretsCachingAgent implements CachingAgent, AccountAware {
 
   @Override
   String getAgentType() {
-    "${accountName}/${clusterName}/${DcosSecretsCachingAgent.simpleName}"
+    "${clusterName}/${DcosSecretsCachingAgent.simpleName}"
   }
 
   @Override
   String getProviderName() {
     DcosProvider.name
-  }
-
-  @Override
-  String getAccountName() {
-    accountName
   }
 
   @Override
@@ -88,7 +81,7 @@ class DcosSecretsCachingAgent implements CachingAgent, AccountAware {
     try {
       secrets = dcosClient.listSecrets(clusterCredentials.secretStore, "").secrets
     } catch (DCOSException e) {
-      log.error("Unable to cache secrets for account [${accountName}] and cluster [${clusterName}].", e)
+      log.error("Unable to cache secrets for cluster=[${clusterName}] using serviceAccount=[${clusterCredentials.dcosConfig.credentials.uid}]", e)
     }
 
     buildCacheResult(secrets)

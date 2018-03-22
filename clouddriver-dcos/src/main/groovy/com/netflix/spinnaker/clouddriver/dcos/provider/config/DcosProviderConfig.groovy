@@ -19,6 +19,7 @@ package com.netflix.spinnaker.clouddriver.dcos.provider.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.google.common.collect.Sets
 import com.netflix.spectator.api.Registry
 import com.netflix.spinnaker.cats.agent.Agent
 import com.netflix.spinnaker.cats.provider.ProviderSynchronizerTypeWrapper
@@ -34,6 +35,8 @@ import com.netflix.spinnaker.clouddriver.dcos.security.DcosClusterCredentials
 import com.netflix.spinnaker.clouddriver.security.AccountCredentialsProvider
 import com.netflix.spinnaker.clouddriver.security.AccountCredentialsRepository
 import com.netflix.spinnaker.clouddriver.security.ProviderUtils
+import groovy.util.logging.Slf4j
+import org.apache.commons.lang3.tuple.Pair
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -42,6 +45,7 @@ import org.springframework.context.annotation.Scope
 
 import java.util.concurrent.ConcurrentHashMap
 
+@Slf4j
 @Configuration
 class DcosProviderConfig {
   @Bean
@@ -81,28 +85,32 @@ class DcosProviderConfig {
                                                    Registry registry) {
 
     def accounts = ProviderUtils.getScheduledAccounts(dcosProvider)
-    def allAccounts = ProviderUtils.buildThreadSafeSetOfAccounts(accountCredentialsRepository, DcosAccountCredentials)
+    Set<DcosAccountCredentials> allAccounts = ProviderUtils.buildThreadSafeSetOfAccounts(accountCredentialsRepository, DcosAccountCredentials)
 
     objectMapper.enable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     def newlyAddedAgents = []
+
+    // Go through all accounts and extract unique cluster credentials by cluster name and UID
+    def addedClusters = Sets.newHashSet()
+
     allAccounts.each { DcosAccountCredentials credentials ->
       if (!accounts.contains(credentials.account)) {
 
         def allClusterCredentials = credentials.getCredentials().credentials
 
         allClusterCredentials.each { DcosClusterCredentials clusterCredentials ->
-          // TODO We should try and enhance this at some point if DC/OS doesn't ever finer grained access controls on
-          // secrets so that we aren't unnecessarily duplicating these agents since they are essentially storing the
-          // exact same secrets for a single cluster
-          newlyAddedAgents << new DcosSecretsCachingAgent(credentials.account, clusterCredentials.cluster,
-                                                          credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper)
 
-          newlyAddedAgents << new DcosServerGroupCachingAgent(credentials.account, clusterCredentials.cluster,
-                                                              credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+          if (!addedClusters.contains(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))) {
+            log.info("Adding caching agents for cluster=${clusterCredentials.cluster} and UID=${clusterCredentials.dcosConfig.credentials.uid}")
+            newlyAddedAgents << new DcosServerGroupCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+            newlyAddedAgents << new DcosSecretsCachingAgent(clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper)
+            newlyAddedAgents << new DcosLoadBalancerCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
 
-          newlyAddedAgents << new DcosLoadBalancerCachingAgent(credentials.account, clusterCredentials.cluster,
-                                                               credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+            addedClusters.add(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))
+          }
+
+          // TODO Need to hand synchronization of accounts - see AWS provider.
         }
       }
     }

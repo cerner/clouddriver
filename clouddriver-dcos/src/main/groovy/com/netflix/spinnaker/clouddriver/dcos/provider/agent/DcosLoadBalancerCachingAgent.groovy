@@ -40,10 +40,13 @@ import mesosphere.marathon.client.model.v2.GetAppNamespaceResponse
 
 import static com.netflix.spinnaker.cats.agent.AgentDataType.Authority.AUTHORITATIVE
 
+// TODO get rid of this?
 @Slf4j
-class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDemandAgent {
+class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent {
 
-  private final String accountName
+  //private final String accountName
+  private final Collection<DcosAccountCredentials> accounts
+  private final Collection<String> accountNames
   private final String clusterName
   private final DCOS dcosClient
   private final DcosCloudProvider dcosCloudProvider = new DcosCloudProvider()
@@ -55,13 +58,14 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
                                                                         //INFORMATIVE.forType(Keys.Namespace.INSTANCES.ns)
                                                                       ] as Set)
 
-  DcosLoadBalancerCachingAgent(String accountName,
+  DcosLoadBalancerCachingAgent(Collection<DcosAccountCredentials> accounts,
                                String clusterName,
                                DcosAccountCredentials credentials,
                                DcosClientProvider clientProvider,
                                ObjectMapper objectMapper,
                                Registry registry) {
-    this.accountName = accountName
+    this.accounts = accounts
+    this.accountNames = accounts.collect { account -> account.name }
     this.clusterName = clusterName
     this.objectMapper = objectMapper
     this.dcosClient = clientProvider.getDcosClient(credentials, clusterName)
@@ -80,14 +84,14 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
     DcosProvider.name
   }
 
-  @Override
-  String getAccountName() {
-    return accountName
-  }
+//  @Override
+//  String getAccountName() {
+//    return accountName
+//  }
 
   @Override
   String getAgentType() {
-    "${accountName}/${clusterName}/${DcosLoadBalancerCachingAgent.simpleName}"
+    "${clusterName}/${DcosLoadBalancerCachingAgent.simpleName}"
   }
 
   @Override
@@ -101,7 +105,8 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
       return null
     }
 
-    if (data.account != accountName) {
+    // TODO evaluate this
+    if (accountNames.contains(data.account.toString())) {
       return null
     }
 
@@ -166,7 +171,7 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
     def keys = providerCache.getIdentifiers(Keys.Namespace.ON_DEMAND.ns)
     keys = keys.findResults {
       def parse = Keys.parse(it)
-      if (parse && parse.account == accountName) {
+      if (parse && accountNames.contains(parse.account)) {
         return it
       } else {
         return null
@@ -201,7 +206,7 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
 
     providerCache.getAll(Keys.Namespace.ON_DEMAND.ns,
                          loadBalancers.collect {
-                           Keys.getLoadBalancerKey(DcosSpinnakerLbId.parse(it.id, accountName).get(), clusterName)
+                           Keys.getLoadBalancerKey(DcosSpinnakerLbId.parse(it.id).get(), clusterName)
                          }).each {
       // Ensure that we don't overwrite data that was inserted by the `handle` method while we retrieved the
       // replication controllers. Furthermore, cache data that hasn't been processed needs to be updated in the ON_DEMAND
@@ -227,14 +232,14 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, AccountAware, OnDema
 
   private List<App> loadLoadBalancers() {
     // Currently not supporting anything but account global load balancers - no associated region.
-    final Optional<GetAppNamespaceResponse> response = dcosClient.maybeApps(accountName)
+    final Optional<GetAppNamespaceResponse> response = dcosClient.maybeApps("")
     if (!response.isPresent()) {
-      log.info("The account namespace [${accountName}] does not exist in DC/OS. No load balancers will be cached.")
+      log.info("Unable to retrieve DC/OS applications from the root namespace. No load balancers will be cached.")
       return []
     }
 
     return response.get().apps.findAll {
-      it.labels?.containsKey("SPINNAKER_LOAD_BALANCER") && DcosSpinnakerLbId.parse(it.id, accountName).isPresent()
+      it.labels?.containsKey("SPINNAKER_LOAD_BALANCER") && DcosSpinnakerLbId.parse(it.id).isPresent()
     }
   }
 
