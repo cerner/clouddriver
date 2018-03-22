@@ -102,7 +102,7 @@ class DcosProviderConfig {
         allClusterCredentials.each { DcosClusterCredentials clusterCredentials ->
 
           if (!addedClusters.contains(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))) {
-            log.info("Adding caching agents for cluster=${clusterCredentials.cluster} and UID=${clusterCredentials.dcosConfig.credentials.uid}")
+            //log.info("Adding caching agents for cluster=${clusterCredentials.cluster} and UID=${clusterCredentials.dcosConfig.credentials.uid}")
             newlyAddedAgents << new DcosServerGroupCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
             newlyAddedAgents << new DcosSecretsCachingAgent(clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper)
             newlyAddedAgents << new DcosLoadBalancerCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
