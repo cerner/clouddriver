@@ -109,7 +109,7 @@ class DcosProviderConfig {
       }
     }
 
-    for (Map.Entry<Pair<String, String>, Collection<DcosAccountCredentials>> entry : newAccountsByCluster.entries()) {
+    for (Map.Entry<Pair<String, String>, Collection<DcosAccountCredentials>> entry : newAccountsByCluster.asMap().entrySet()) {
       newlyAddedAgents << new DcosServerGroupCachingAgent(entry.value, entry.key.left, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
       newlyAddedAgents << new DcosSecretsCachingAgent(entry.key.left, Iterables.getFirst(entry.value, null), new DcosClientProvider(accountCredentialsProvider), objectMapper)
       newlyAddedAgents << new DcosLoadBalancerCachingAgent(entry.value, entry.key.left, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
