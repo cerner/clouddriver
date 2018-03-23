@@ -19,6 +19,7 @@ package com.netflix.spinnaker.clouddriver.dcos.provider.agent
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.google.common.collect.Iterables
 import com.netflix.spectator.api.Registry
 import com.netflix.spinnaker.cats.agent.*
 import com.netflix.spinnaker.cats.cache.CacheData
@@ -65,11 +66,13 @@ class DcosServerGroupCachingAgent implements CachingAgent, OnDemandAgent {
 
   DcosServerGroupCachingAgent(Collection<DcosAccountCredentials> accounts,
                               String clusterName,
-                              DcosAccountCredentials credentials,
+                              //DcosAccountCredentials credentials,
                               DcosClientProvider clientProvider,
                               ObjectMapper objectMapper,
                               Registry registry) {
     this.accounts = accounts
+
+    def credentials = Iterables.getFirst(accounts, null)
 
     // TODO does this work?
     this.accountNames = accounts.collect { account -> account.name }

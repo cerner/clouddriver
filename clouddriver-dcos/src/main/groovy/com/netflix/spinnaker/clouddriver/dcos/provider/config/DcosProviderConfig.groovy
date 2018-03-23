@@ -19,6 +19,8 @@ package com.netflix.spinnaker.clouddriver.dcos.provider.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.google.common.collect.Iterables
+import com.google.common.collect.Multimap
 import com.google.common.collect.Sets
 import com.netflix.spectator.api.Registry
 import com.netflix.spinnaker.cats.agent.Agent
@@ -92,28 +94,49 @@ class DcosProviderConfig {
     def newlyAddedAgents = []
 
     // Go through all accounts and extract unique cluster credentials by cluster name and UID
-    def addedClusters = Sets.newHashSet()
+    //def addedClusters = Sets.newHashSet()
 
+    Multimap<Pair<String, String>, DcosAccountCredentials> newAccountsByCluster
+
+    // TODO need to get map keyed by cluster/uid, where the value is an array of accounts
     allAccounts.each { DcosAccountCredentials credentials ->
       if (!accounts.contains(credentials.account)) {
-
         def allClusterCredentials = credentials.getCredentials().credentials
-
         allClusterCredentials.each { DcosClusterCredentials clusterCredentials ->
-
-          if (!addedClusters.contains(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))) {
-            //log.info("Adding caching agents for cluster=${clusterCredentials.cluster} and UID=${clusterCredentials.dcosConfig.credentials.uid}")
-            newlyAddedAgents << new DcosServerGroupCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
-            newlyAddedAgents << new DcosSecretsCachingAgent(clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper)
-            newlyAddedAgents << new DcosLoadBalancerCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
-
-            addedClusters.add(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))
-          }
-
-          // TODO Need to hand synchronization of accounts - see AWS provider.
+          newAccountsByCluster.put(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid), credentials)
         }
       }
     }
+
+    for (Map.Entry<Pair<String, String>, Collection<DcosAccountCredentials>> entry : newAccountsByCluster.entries()) {
+      newlyAddedAgents << new DcosServerGroupCachingAgent(entry.value, entry.key.left, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+      newlyAddedAgents << new DcosSecretsCachingAgent(entry.key.left, Iterables.getFirst(entry.value, null), new DcosClientProvider(accountCredentialsProvider), objectMapper)
+      newlyAddedAgents << new DcosLoadBalancerCachingAgent(entry.value, entry.key.left, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+    }
+
+
+
+
+//    allAccounts.each { DcosAccountCredentials credentials ->
+//      if (!accounts.contains(credentials.account)) {
+//
+//        def allClusterCredentials = credentials.getCredentials().credentials
+//
+//        allClusterCredentials.each { DcosClusterCredentials clusterCredentials ->
+//
+//          if (!addedClusters.contains(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))) {
+//            //log.info("Adding caching agents for cluster=${clusterCredentials.cluster} and UID=${clusterCredentials.dcosConfig.credentials.uid}")
+//            newlyAddedAgents << new DcosServerGroupCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+//            newlyAddedAgents << new DcosSecretsCachingAgent(clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper)
+//            newlyAddedAgents << new DcosLoadBalancerCachingAgent(allAccounts, clusterCredentials.cluster, credentials, new DcosClientProvider(accountCredentialsProvider), objectMapper, registry)
+//
+//            addedClusters.add(Pair.of(clusterCredentials.cluster, clusterCredentials.dcosConfig.credentials.uid))
+//          }
+//
+//          // TODO Need to hand synchronization of accounts - see AWS provider.
+//        }
+//      }
+//    }
 
     if (!newlyAddedAgents.isEmpty()) {
       dcosProvider.agents.addAll(newlyAddedAgents)
