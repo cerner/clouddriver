@@ -19,6 +19,7 @@ package com.netflix.spinnaker.clouddriver.dcos.provider.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.google.common.collect.ArrayListMultimap
 import com.google.common.collect.Iterables
 import com.google.common.collect.Multimap
 import com.google.common.collect.Sets
@@ -96,7 +97,7 @@ class DcosProviderConfig {
     // Go through all accounts and extract unique cluster credentials by cluster name and UID
     //def addedClusters = Sets.newHashSet()
 
-    Multimap<Pair<String, String>, DcosAccountCredentials> newAccountsByCluster
+    Multimap<Pair<String, String>, DcosAccountCredentials> newAccountsByCluster = ArrayListMultimap.create()
 
     // TODO need to get map keyed by cluster/uid, where the value is an array of accounts
     allAccounts.each { DcosAccountCredentials credentials ->
