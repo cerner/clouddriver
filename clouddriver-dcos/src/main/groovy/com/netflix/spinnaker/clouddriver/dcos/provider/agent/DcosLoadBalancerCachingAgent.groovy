@@ -43,12 +43,12 @@ import static com.netflix.spinnaker.cats.agent.AgentDataType.Authority.AUTHORITA
 
 // TODO get rid of this?
 @Slf4j
-class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent {
+class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent, DcosClusterAware {
 
-  //private final String accountName
   private final Collection<DcosAccountCredentials> accounts
   private final Collection<String> accountNames
   private final String clusterName
+  private final String serviceAccountUID
   private final DCOS dcosClient
   private final DcosCloudProvider dcosCloudProvider = new DcosCloudProvider()
   private final ObjectMapper objectMapper
@@ -61,17 +61,17 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent {
 
   DcosLoadBalancerCachingAgent(Collection<DcosAccountCredentials> accounts,
                                String clusterName,
-                               //DcosAccountCredentials credentials,
                                DcosClientProvider clientProvider,
                                ObjectMapper objectMapper,
                                Registry registry) {
     this.accounts = accounts
-    def credentials = Iterables.getFirst(accounts, null)
     this.accountNames = accounts.collect { account -> account.name }
 
+    def primaryAccount = Iterables.getFirst(accounts, null)
     this.clusterName = clusterName
+    this.serviceAccountUID = primaryAccount.getCredentialsByCluster(clusterName).dcosConfig.credentials.uid
     this.objectMapper = objectMapper
-    this.dcosClient = clientProvider.getDcosClient(credentials, clusterName)
+    this.dcosClient = clientProvider.getDcosClient(primaryAccount, clusterName)
     this.metricsSupport = new OnDemandMetricsSupport(registry,
                                                      this,
                                                      "$dcosCloudProvider.id:$OnDemandAgent.OnDemandType.LoadBalancer")
@@ -87,10 +87,20 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent {
     DcosProvider.name
   }
 
-//  @Override
-//  String getAccountName() {
-//    return accountName
-//  }
+  @Override
+  Collection<DcosAccountCredentials> getAccounts() {
+    return accounts
+  }
+
+  @Override
+  String getClusterName() {
+    return clusterName
+  }
+
+  @Override
+  String getServiceAccountUID() {
+    return serviceAccountUID
+  }
 
   @Override
   String getAgentType() {
@@ -108,7 +118,6 @@ class DcosLoadBalancerCachingAgent implements CachingAgent, OnDemandAgent {
       return null
     }
 
-    // TODO evaluate this
     if (accountNames.contains(data.account.toString())) {
       return null
     }

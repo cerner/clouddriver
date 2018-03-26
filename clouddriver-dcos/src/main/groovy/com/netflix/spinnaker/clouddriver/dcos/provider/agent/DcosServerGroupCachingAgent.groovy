@@ -45,10 +45,11 @@ import static com.netflix.spinnaker.cats.agent.AgentDataType.Authority.AUTHORITA
 import static com.netflix.spinnaker.cats.agent.AgentDataType.Authority.INFORMATIVE
 
 @Slf4j
-class DcosServerGroupCachingAgent implements CachingAgent, OnDemandAgent {
+class DcosServerGroupCachingAgent implements CachingAgent, OnDemandAgent, DcosClusterAware {
   private final Collection<DcosAccountCredentials> accounts
   private final Set<String> accountNames
   private final String clusterName
+  private final String serviceAccountUID
   private final String clusterUrl
   private final DCOS dcosClient
   private final DcosCloudProvider dcosCloudProvider = new DcosCloudProvider()
@@ -66,20 +67,18 @@ class DcosServerGroupCachingAgent implements CachingAgent, OnDemandAgent {
 
   DcosServerGroupCachingAgent(Collection<DcosAccountCredentials> accounts,
                               String clusterName,
-                              //DcosAccountCredentials credentials,
                               DcosClientProvider clientProvider,
                               ObjectMapper objectMapper,
                               Registry registry) {
     this.accounts = accounts
-
-    def credentials = Iterables.getFirst(accounts, null)
-
-    // TODO does this work?
     this.accountNames = accounts.collect { account -> account.name }
+
+    def primaryAccount = Iterables.getFirst(accounts, null)
     this.clusterName = clusterName
-    this.clusterUrl = credentials.getCredentialsByCluster(clusterName).dcosUrl
+    this.serviceAccountUID = primaryAccount.getCredentialsByCluster(clusterName).dcosConfig.credentials.uid
+    this.clusterUrl = primaryAccount.getCredentialsByCluster(clusterName).dcosUrl
     this.objectMapper = objectMapper
-    this.dcosClient = clientProvider.getDcosClient(credentials, clusterName)
+    this.dcosClient = clientProvider.getDcosClient(primaryAccount, clusterName)
     this.metricsSupport = new OnDemandMetricsSupport(registry,
       this,
       "$dcosCloudProvider.id:$OnDemandAgent.OnDemandType.ServerGroup")
@@ -96,10 +95,20 @@ class DcosServerGroupCachingAgent implements CachingAgent, OnDemandAgent {
     DcosProvider.name
   }
 
-//  @Override
-//  String getAccountName() {
-//    return accountName
-//  }
+  @Override
+  Collection<DcosAccountCredentials> getAccounts() {
+    return accounts
+  }
+
+  @Override
+  String getClusterName() {
+    return clusterName
+  }
+
+  @Override
+  String getServiceAccountUID() {
+    return serviceAccountUID
+  }
 
   @Override
   Collection<AgentDataType> getProvidedDataTypes() {
